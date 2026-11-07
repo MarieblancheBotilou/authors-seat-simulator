@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Author's Seat Simulator</title>
+<style>
+  :root {
+    --bg: #f6f8fc;
+    --panel: #ffffff;
+    --ink: #1f1f1f;
+    --muted: #5f6368;
+    --line: #e0e3e7;
+    --hover: #f2f6fc;
+    --sel: #d3e3fd;
+    --compose: #c2e7ff;
+    --accent: #0b57d0;
+    --accent-dark: #0842a0;
+    --good: #137333;
+    --good-bg: #e6f4ea;
+    --bad: #b3261e;
+    --bad-bg: #fce8e6;
+    --warn: #8a5a00;
+    --focus: #0b57d0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font-family: Roboto, "Segoe UI", Arial, system-ui, sans-serif; font-size: 15px; line-height: 1.5; }
+  button { font: inherit; color: inherit; }
+  p { margin: 0 0 .8em; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  svg.ic { width: 20px; height: 20px; fill: currentColor; flex: none; }
+
+  /* ---------- app frame ---------- */
+  .app { max-width: 1040px; margin: 0 auto; padding: 8px; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 6px 8px 10px; }
+  .brand { display: flex; align-items: center; gap: 8px; font-size: 1.3rem; color: var(--muted); min-width: 170px; }
+  .brand .logo { width: 30px; height: 30px; border-radius: 8px; background: #6750a4; display: grid; place-items: center; }
+  .brand .logo svg { fill: #fff; width: 18px; height: 18px; }
+  .search { flex: 1; display: flex; align-items: center; gap: 10px; background: #e9eef6; border-radius: 24px; padding: 9px 16px; color: var(--muted); }
+  .stepper { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+  .progress { height: 4px; background: var(--line); border-radius: 2px; margin: 0 8px 10px; overflow: hidden; }
+  .progress > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+
+  .layout { display: grid; grid-template-columns: 190px 1fr; gap: 8px; }
+  .side { padding-top: 2px; }
+  .compose-btn { display: inline-flex; align-items: center; gap: 10px; background: var(--compose); border: 0; border-radius: 16px; padding: 16px 22px; font-weight: 500; margin-bottom: 12px; cursor: default; }
+  .nav { list-style: none; margin: 0; padding: 0; }
+  .nav li { display: flex; align-items: center; gap: 14px; padding: 5px 12px 5px 22px; border-radius: 0 16px 16px 0; font-size: .9rem; color: var(--ink); }
+  .nav li.on { background: var(--sel); font-weight: 700; }
+  .nav li .count { margin-left: auto; font-size: .8rem; }
+  .main { background: var(--panel); border-radius: 16px; min-height: 520px; overflow: hidden; }
+  @media (max-width: 720px) {
+    .layout { grid-template-columns: 1fr; }
+    .side { display: none; }
+    .brand { min-width: 0; }
+    .brand span { display: none; }
+  }
+
+  .toolbar { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .iconbtn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 0; background: none; color: var(--muted); }
+  button.iconbtn { cursor: pointer; }
+  button.iconbtn:hover { background: var(--hover); }
+  .toolbar .right { margin-left: auto; font-size: .8rem; }
+
+  /* ---------- inbox ---------- */
+  .tabs { display: flex; border-bottom: 1px solid var(--line); font-size: .88rem; }
+  .tabs div { padding: 12px 18px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .tabs .on { color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); font-weight: 500; }
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .row { display: grid; grid-template-columns: 22px 180px 1fr auto; gap: 10px; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: .88rem; background: #f8fafd; color: var(--muted); }
+  .row .who, .row .what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .what b { color: var(--ink); font-weight: 400; }
+  .row.unread { background: #fff; color: var(--ink); }
+  .row.unread .who, .row.unread .what b, .row.unread .when { font-weight: 700; }
+  .row .star { color: #c4c7c5; }
+  .row .when { font-size: .8rem; white-space: nowrap; }
+  button.row { width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; position: relative; }
+  button.row:hover { box-shadow: inset 1px 0 0 #dadce0, inset -1px 0 0 #dadce0, 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); z-index: 1; }
+  .chip { display: inline-block; font-size: .72rem; border: 1px solid #c4c7c5; border-radius: 12px; padding: 0 8px; margin-left: 6px; color: var(--muted); font-weight: 400 !important; }
+  .chip.red { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+  .hint { margin: 14px 16px; padding: 10px 14px; background: #fef7e0; border-radius: 8px; font-size: .88rem; color: #3c3000; }
+  @media (max-width: 720px) {
+    .row { grid-template-columns: 1fr auto; }
+    .row .star { display: none; }
+    .row .who { grid-column: 1; }
+    .row .when { grid-column: 2; grid-row: 1; }
+    .row .what { grid-column: 1 / -1; white-space: normal; }
+  }
+
+  /* ---------- reading pane ---------- */
+  .read { padding: 18px 24px 24px; }
+  .subject { font-size: 1.35rem; font-weight: 400; margin: 0 0 14px 52px; }
+  .subject .chip { vertical-align: middle; }
+  .sender { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: start; margin-bottom: 14px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #6750a4; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: .85rem; }
+  .avatar.me { background: #0b8043; }
+  .sender .name b { font-weight: 700; }
+  .sender .addr, .sender .to, .sender .time { font-size: .8rem; color: var(--muted); }
+  .body { margin-left: 52px; max-width: 680px; }
+  @media (max-width: 720px) { .subject, .body { margin-left: 0; } .read { padding: 14px; } }
+  .decision { display: inline-block; background: #fef7e0; border: 1px solid #f4d470; color: #3c3000; padding: 2px 10px; border-radius: 6px; font-weight: 700; }
+  .rev { border-left: 3px solid #c4c7c5; padding: 4px 0 4px 14px; margin: 0 0 14px; }
+  .rev .lbl { font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .rev p { margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: .98rem; }
+  .sig { color: var(--muted); }
+
+  .attach-h { font-size: .85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; margin: 16px 0 8px; }
+  .attach { display: inline-flex; flex-direction: column; width: 220px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; cursor: zoom-in; padding: 0; text-align: left; }
+  .attach:hover { border-color: #a8c7fa; box-shadow: 0 1px 3px rgba(60,64,67,.25); }
+  .attach .thumb { background: #f1f3f4; padding: 8px; position: relative; }
+  .attach .thumb > svg { width: 100%; height: auto; display: block; background: #fff; }
+  .attach .zoom { position: absolute; right: 12px; bottom: 12px; background: rgba(32,33,36,.8); color: #fff; border-radius: 12px; font-size: .72rem; padding: 2px 8px; display: flex; gap: 4px; align-items: center; }
+  .attach .zoom svg { width: 14px; height: 14px; fill: #fff; }
+  .attach .fname { display: flex; gap: 8px; align-items: center; padding: 8px 10px; font-size: .8rem; }
+  .attach .fname .ic { width: 16px; height: 16px; fill: var(--bad); }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .btn { border: 1px solid #747775; background: #fff; border-radius: 20px; padding: 8px 20px; font-weight: 500; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-dark); }
+  .btn[hidden] { display: none; }
+  .btn[disabled] { opacity: .5; cursor: default; }
+
+  /* ---------- compose / task ---------- */
+  .compose { border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(60,64,67,.2), 0 1px 3px rgba(60,64,67,.3); margin: 16px; background: #fff; }
+  .compose-bar { background: #f2f6fc; padding: 10px 16px; display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: .9rem; }
+  .compose-bar .right { margin-left: auto; display: flex; gap: 2px; color: var(--muted); }
+  .compose-meta { padding: 6px 16px; border-bottom: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
+  .compose-body { padding: 16px; }
+  .quoted { background: #f8fafd; border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 0 8px 8px 0; margin-bottom: 14px; }
+  .quoted .lbl { font-size: .78rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; }
+  .quoted p { margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif; }
+  .ctx { font-size: .9rem; color: #3c4043; }
+  .figlink { background: none; border: 0; color: var(--accent); text-decoration: underline; cursor: pointer; padding: 0; font-weight: 500; }
+
+  fieldset { border: 0; padding: 0; margin: 0 0 10px; }
+  legend { font-weight: 700; margin-bottom: 10px; padding: 0; font-size: 1rem; }
+  .choices { display: grid; gap: 8px; }
+  .choice { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start; text-align: left; width: 100%; padding: 11px 14px; border: 1px solid #c4c7c5; border-radius: 10px; background: #fff; cursor: pointer; }
+  .choice:hover:not([disabled]) { background: var(--hover); border-color: var(--accent); }
+  .choice .mark { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #747775; display: grid; place-items: center; font-size: .75rem; font-weight: 700; margin-top: 1px; }
+  .choice.multi .mark { border-radius: 5px; }
+  .choice[aria-pressed="true"], .choice[aria-checked="true"] { border-color: var(--accent); background: #ecf3fe; }
+  .choice[aria-pressed="true"] .mark, .choice[aria-checked="true"] .mark { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .choice.is-best { border-color: var(--good); }
+  .choice.res-ok { border-color: var(--good); background: var(--good-bg); }
+  .choice.res-ok .mark { background: var(--good); border-color: var(--good); color: #fff; }
+  .choice.res-no { border-color: var(--bad); background: var(--bad-bg); }
+  .choice.res-no .mark { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .choice[disabled] { cursor: default; }
+
+  .fb { border-radius: 10px; padding: 12px 14px; margin: 10px 0; border: 1px solid; }
+  .fb.ok { background: var(--good-bg); border-color: #a8dab5; }
+  .fb.no { background: var(--bad-bg); border-color: #f6aea9; }
+  .fb .v { font-weight: 700; margin-bottom: 2px; }
+  .fb.ok .v { color: var(--good); }
+  .fb.no .v { color: var(--bad); }
+  .fb p { margin: 0; }
+  .insight { display: grid; grid-template-columns: 22px 1fr; gap: 10px; background: #f3edf7; border-radius: 10px; padding: 12px 14px; margin: 10px 0; font-size: .92rem; }
+  .insight .ic { fill: #6750a4; margin-top: 2px; }
+  .insight b { color: #4a3880; }
+  .letter { background: #fff; border: 1px dashed #c4c7c5; border-radius: 10px; padding: 12px 14px; margin: 10px 0; font-family: Georgia, "Times New Roman", serif; font-size: .93rem; }
+  .letter .lbl { font-family: Roboto, Arial, sans-serif; font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; display: block; margin-bottom: 4px; }
+
+  /* ---------- debrief ---------- */
+  .debrief { padding: 20px 24px 24px; }
+  @media (max-width: 720px) { .debrief { padding: 14px; } }
+  .debrief h3 { font-size: 1.25rem; font-weight: 400; margin: 0 0 8px; }
+  .score { display: inline-block; background: #ecf3fe; color: var(--accent-dark); border-radius: 16px; padding: 3px 12px; font-weight: 700; font-size: .88rem; margin-bottom: 12px; }
+  .tablewrap { overflow-x: auto; margin: 6px 0 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; min-width: 560px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  thead th { background: #f8fafd; }
+  tbody th { font-weight: 500; background: #fcfcfd; }
+  .y { color: var(--good); font-weight: 700; }
+  .n { color: var(--bad); font-weight: 700; }
+  .p { color: var(--warn); font-weight: 700; }
+  tr.cost td { background: #f3edf7; }
+  .takeaway { background: #4a3880; color: #fff; border-radius: 12px; padding: 14px 18px; font-family: Georgia, "Times New Roman", serif; font-size: 1rem; }
+  .takeaway p { margin: 0; }
+  details { margin: 12px 0; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+
+  /* ---------- figure lightbox ---------- */
+  dialog.lightbox { border: 0; border-radius: 14px; padding: 0; width: min(920px, 96vw); max-height: 94vh; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+  dialog.lightbox::backdrop { background: rgba(32,33,36,.75); }
+  .lb-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line); }
+  .lb-head h2 { font-size: 1rem; font-weight: 500; margin: 0; }
+  .lb-head .iconbtn { margin-left: auto; }
+  .lb-body { padding: 18px 22px 22px; overflow: auto; }
+  .lb-body svg { width: 100%; height: auto; display: block; }
+  .caption { font-family: Georgia, "Times New Roman", serif; font-size: .95rem; margin-top: 10px; }
+  .caption i { font-style: italic; }
+  .lb-note { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .screen { animation: fade .22s ease-out; }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  }
+  .screen:focus { outline: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar" aria-hidden="true">
+    <span class="iconbtn"><svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg></span>
+    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 4-8 5-8-5V6l8 5 8-5z"/></svg></span><span>Mail</span></div>
+    <div class="search"><svg class="ic" viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 9.5 16a6.5 6.5 0 0 0 4.2-1.6l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>Search mail</div>
+  </div>
+  <div class="stepper" id="stepper" style="padding:0 10px 4px" aria-live="polite"></div>
+  <div class="progress" aria-hidden="true"><span id="bar" style="width:0"></span></div>
+
+  <div class="layout">
+    <aside class="side" aria-hidden="true">
+      <span class="compose-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg>Compose</span>
+      <ul class="nav">
+        <li class="on"><svg class="ic" viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 12h-4a3 3 0 0 1-6 0H5V5h14z"/></svg>Inbox<span class="count" id="navcount">3</span></li>
+        <li><svg class="ic" viewBox="0 0 24 24"><path d="m12 17.3 6.2 3.7-1.6-7 5.4-4.7-7.2-.6L12 2 9.2 8.7l-7.2.6 5.4 4.7-1.6 7z"/></svg>Starred</li>
+        <li><svg class="ic" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7z"/></svg>Snoozed</li>
+        <li><svg class="ic" viewBox="0 0 24 24"><path d="M2 21 23 12 2 3v7l15 2-15 2z"/></svg>Sent</li>
+        <li><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm4 18H6V4h7v5h5z"/></svg>Drafts<span class="count" id="draftcount">1</span></li>
+      </ul>
+    </aside>
+    <main class="main" id="stage" aria-label="Author's Seat Simulator"></main>
+  </div>
+</div>
+
+<dialog class="lightbox" id="lightbox" aria-labelledby="lb-title">
+  <div class="lb-head">
+    <h2 id="lb-title">Figure2_MS-2026-0418.png</h2>
+    <button type="button" class="iconbtn" id="lb-close" aria-label="Close enlarged figure"><svg class="ic" viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg></button>
+  </div>
+  <div class="lb-body">
+    <div id="lb-fig"></div>
+    <p class="caption"><i>Figure 2.</i> Mean lab report scores by condition across six labs (<i>N</i> = 64). Error bars represent ±1 <i>SE</i>.</p>
+    <p class="lb-note">This is the figure as you, the author, submitted it. Press Esc or the close button to return.</p>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  /* =================== content =================== */
+  var MS_TITLE = "Supporting Lab Report Writing in First-Year Engineering: A Best Practice Report";
+  var R = [
+    { who: "Reviewer 1", text: "Figure 2 is not accessible." },
+    { who: "Reviewer 2", text: "Figure 2 is unacceptable for a UDL journal. Add alt text and redo it in black and white." },
+    { who: "Reviewer 3", text: "Figure 2 (p. 6) has no alt text, and the legend separates the two groups by color alone. Readers who use screen readers or who are color-blind may miss your main finding. You might add short alt text describing the trend, and consider adding labels or patterns to the bars." }
+  ];
+
+  var TASKS = [
+    {
+      rev: 0, type: "single",
+      context: "The editor expects a point-by-point response. Reviewer 1 doesn't say which barrier they mean, and you can't contact them directly in a double-blind review.",
+      q: "What is the most defensible way to respond to Reviewer 1?",
+      best: 2,
+      opts: [
+        { t: "Add alt text to Figure 2 and report the comment as resolved.",
+          f: "Alt text is a reasonable guess, but it's still a guess. “Not accessible” could also mean color dependence, low resolution, or no data table. If you guess wrong, the same comment comes back in the next round." },
+        { t: "Ask the reviewer to clarify what they meant before you revise.",
+          f: "You can only ask through the editor, which uses days of your 21-day window and may still get no answer. The double-blind process is built to avoid this back-and-forth." },
+        { t: "Audit Figure 2 against the journal's accessibility guidelines, fix every barrier you find, and state your interpretation of the comment in your response.",
+          f: "This is the most defensible move. Because the comment doesn't name the barrier, the diagnostic work falls to you. Stating your interpretation shows the editor you took the comment seriously." },
+        { t: "Reply that the comment is too vague to act on and leave the figure unchanged.",
+          f: "Even if it's true, editors tend to read this as non-responsive, and it leaves a real barrier in the figure." }
+      ],
+      insight: "A vague comment doesn't make revising easier. It moves the reviewer's diagnostic work onto the author.",
+      letter: "Response to Reviewer 1: We understood this comment to refer to Figure 2's missing alt text and its reliance on color. We audited the figure against the journal's author guidelines and made the following changes…"
+    },
+    {
+      rev: 1, type: "single",
+      context: "A black-and-white version would make your two conditions hard to tell apart, and that contrast is the core of your argument. You also can't tell whether “unacceptable” means this concern alone could lead to rejection.",
+      q: "How should you respond to Reviewer 2?",
+      best: 1,
+      opts: [
+        { t: "Comply with both requests exactly. The reviewer's recommendation shapes the decision.",
+          f: "Complying is the safe move politically, but it may weaken how your data communicate. Authors can respectfully propose an alternative that meets the reviewer's underlying concern." },
+        { t: "Add alt text, and propose an alternative that removes the color dependence (direct labels and patterns), explaining your reasoning to the editor.",
+          f: "This solves the real problem (information carried by color alone) while protecting the figure's purpose. Notice the cost, though: you now have to write a justification that a clearer comment would have made unnecessary." },
+        { t: "Add alt text and leave the black-and-white request unmentioned.",
+          f: "Unaddressed requests are a common reason for another round of revision. A point-by-point response has to account for every request, including the ones you decline." },
+        { t: "Ask the editor to disregard Reviewer 2 because of the harsh tone.",
+          f: "Tone matters, but the underlying concern is valid. Editors weigh substance, so this request would likely be declined, and it could hurt your credibility." }
+      ],
+      insight: "Prescriptive, high-stakes wording (“unacceptable,” “redo”) leaves the author unsure how serious the concern is, and forces a choice between complying and justifying.",
+      letter: "Response to Reviewer 2: We have added alt text to Figure 2. Rather than converting it to grayscale, which would obscure the contrast between conditions, we added direct labels and distinct patterns so the groups no longer depend on color…"
+    },
+    {
+      rev: 2, type: "multi",
+      context: "This is the comment you could start revising today.",
+      q: "Which features of Reviewer 3's comment let you revise without guessing? Select all that apply.",
+      opts: [
+        { t: "It pinpoints the location (Figure 2, p. 6).", ok: true },
+        { t: "It names the specific barriers (no alt text; a color-only legend).", ok: true },
+        { t: "It identifies who is affected (screen-reader users and color-blind readers).", ok: true },
+        { t: "It states the consequence for your argument (readers may miss the main finding).", ok: true },
+        { t: "It offers options rather than prescribing one fix.", ok: true },
+        { t: "It cites a specific accessibility standard by section number.", ok: false },
+        { t: "It opens by praising the manuscript before raising concerns.", ok: false }
+      ],
+      fOk: "Each feature answers a question the author can't ask in a double-blind review: Where? What exactly? Who is affected? Why does it matter? What are my options?",
+      fNo: "The first five features are what make the comment usable. Reviewer 3 doesn't cite a standard or open with praise, and the comment works without either.",
+      insight: "Specific doesn't mean longer for its own sake. Every sentence in Reviewer 3's comment removes a decision the author would otherwise have to guess at.",
+      letter: "Response to Reviewer 3: Thank you. We added alt text describing the trend on p. 6 and applied direct labels and patterns to the bars."
+    }
+  ];
+
+  var STEPS = ["Inbox", "Decision letter", "Respond to Reviewer 1", "Respond to Reviewer 2", "Respond to Reviewer 3", "Debrief"];
+
+  /* =================== helpers =================== */
+  var stage = document.getElementById("stage");
+  var state;
+  function reset() { state = { step: 0, first: {}, letter: [] }; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function ic(path, cls) { return '<svg class="ic ' + (cls || "") + '" viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>'; }
+  var P = {
+    back: "M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z",
+    archive: "M20.5 5.2 19.1 3.6A1.5 1.5 0 0 0 18 3H6c-.5 0-.9.2-1.2.6L3.5 5.2A2 2 0 0 0 3 6.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.5c0-.5-.2-.9-.5-1.3zM12 17.5 6.5 12H10v-2h4v2h3.5zM5.1 5l.8-1h12l.9 1z",
+    trash: "M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zM19 4h-3.5l-1-1h-5l-1 1H5v2h14z",
+    mail: "M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 4-8 5-8-5V6l8 5 8-5z",
+    clip: "M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z",
+    star: "M22 9.2l-7.2-.6L12 2 9.2 8.6 2 9.2l5.5 4.7L5.8 21 12 17.3l6.2 3.7-1.6-7.1zM12 15.4l-3.8 2.3 1-4.3-3.3-2.9 4.4-.4L12 6.1l1.7 4 4.4.4-3.3 2.9 1 4.3z",
+    zoom: "M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 9.5 16a6.5 6.5 0 0 0 4.2-1.6l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z",
+    img: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5z",
+    reply: "M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z",
+    bulb: "M9 21c0 .5.4 1 1 1h4c.6 0 1-.5 1-1v-1H9zm3-19a7 7 0 0 0-4 12.7V17c0 .5.4 1 1 1h6c.6 0 1-.5 1-1v-2.3A7 7 0 0 0 12 2z",
+    min: "M6 19h12v2H6z",
+    x: "M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"
+  };
+
+  /* Realistic journal figure that is deliberately inaccessible:
+     groups are distinguished by red vs. green only, and it has no alt text in the manuscript. */
+  function figureSVG(big) {
+    var std = [62, 64, 65, 67, 68, 70], red = [61, 64, 70, 74, 78, 81], se = [2.1, 2.0, 1.9, 2.2, 2.0, 1.8];
+    var x0 = 70, x1 = 545, y0 = 290, y1 = 40, vmin = 50, vmax = 90;
+    function Y(v) { return y0 - (v - vmin) * (y0 - y1) / (vmax - vmin); }
+    var gw = (x1 - x0) / 6, bw = 24, s = "";
+    for (var t = vmin; t <= vmax; t += 10) {
+      s += '<line x1="' + x0 + '" x2="' + x1 + '" y1="' + Y(t) + '" y2="' + Y(t) + '" stroke="#e5e5e5"/>' +
+           '<text x="' + (x0 - 10) + '" y="' + (Y(t) + 4) + '" text-anchor="end" font-size="13">' + t + '</text>';
+    }
+    for (var i = 0; i < 6; i++) {
+      var cx = x0 + gw * i + gw / 2;
+      [[std[i], "#d93025", cx - bw - 2], [red[i], "#1e8e3e", cx + 2]].forEach(function (b) {
+        var y = Y(b[0]), e = se[i] * (y0 - y1) / (vmax - vmin), mx = b[2] + bw / 2;
+        s += '<rect x="' + b[2] + '" y="' + y + '" width="' + bw + '" height="' + (y0 - y) + '" fill="' + b[1] + '"/>' +
+             '<line x1="' + mx + '" x2="' + mx + '" y1="' + (y - e) + '" y2="' + (y + e) + '" stroke="#333"/>' +
+             '<line x1="' + (mx - 5) + '" x2="' + (mx + 5) + '" y1="' + (y - e) + '" y2="' + (y - e) + '" stroke="#333"/>';
+      });
+      s += '<text x="' + cx + '" y="' + (y0 + 20) + '" text-anchor="middle" font-size="13">Lab ' + (i + 1) + '</text>';
+    }
+    s += '<line x1="' + x0 + '" x2="' + x1 + '" y1="' + y0 + '" y2="' + y0 + '" stroke="#333"/>' +
+         '<line x1="' + x0 + '" x2="' + x0 + '" y1="' + y1 + '" y2="' + y0 + '" stroke="#333"/>' +
+         '<text transform="translate(20 ' + ((y0 + y1) / 2) + ') rotate(-90)" text-anchor="middle" font-size="14">Mean report score</text>' +
+         '<text x="' + ((x0 + x1) / 2) + '" y="' + (y0 + 44) + '" text-anchor="middle" font-size="14">Lab assignment</text>' +
+         '<rect x="' + (x0 + 14) + '" y="' + (y1 + 4) + '" width="190" height="48" fill="#fff" stroke="#999"/>' +
+         '<rect x="' + (x0 + 24) + '" y="' + (y1 + 14) + '" width="14" height="10" fill="#d93025"/>' +
+         '<text x="' + (x0 + 46) + '" y="' + (y1 + 23) + '" font-size="12">Standard manual</text>' +
+         '<rect x="' + (x0 + 24) + '" y="' + (y1 + 32) + '" width="14" height="10" fill="#1e8e3e"/>' +
+         '<text x="' + (x0 + 46) + '" y="' + (y1 + 41) + '" font-size="12">Redesigned manual</text>';
+    var label = "Figure 2: grouped bar chart of mean lab report scores, from 50 to 90, across Labs 1 to 6, with error bars. " +
+      "The standard-manual group (red bars) rises slowly from 62 to 70. The redesigned-manual group (green bars) starts at 61 and rises faster from Lab 3 onward, reaching 81 by Lab 6. " +
+      "The two groups are distinguished only by red and green color.";
+    return '<svg viewBox="0 0 560 345" font-family="Georgia, Times New Roman, serif" fill="#222" role="img" aria-label="' + (big ? label : "Thumbnail of Figure 2") + '">' + s + '</svg>';
+  }
+
+  function attachCard() {
+    return '<button type="button" class="attach" data-open-fig aria-label="Open Figure2_MS-2026-0418.png, enlarged view">' +
+      '<span class="thumb">' + figureSVG(false) + '<span class="zoom">' + ic(P.zoom) + 'Click to enlarge</span></span>' +
+      '<span class="fname">' + ic(P.img) + 'Figure2_MS-2026-0418.png</span></button>';
+  }
+
+  /* =================== screens =================== */
+  function inbox() {
+    var rows = [
+      ["Dr. Lena Ortiz", "Re: Any word from the journal?", "Checking in — the editor said decisions would go out this week. Let me know as soon as you hear…", "8:52 AM", true],
+      ["Graduate & Professional School", "Reminder: IRB continuing review due Nov 20", "Protocol 2025-0187 requires continuing review before the expiration date…", "Yesterday", false],
+      ["University Libraries", "Your interlibrary loan request is ready", "“Universal design in STEM laboratories” is available for pickup until…", "Nov 4", false],
+      ["Center for Teaching Excellence", "Call for proposals: Spring Teaching Symposium", "We invite faculty and graduate students to submit 20-minute sessions on inclusive…", "Nov 3", false],
+      ["Accessibility in Higher Ed Conference", "Proposal received: “Redesigning lab manuals with UDL”", "Thank you for your submission. Reviews will be returned by mid-December…", "Nov 1", false]
+    ];
+    var html = '<div class="toolbar" aria-hidden="true"><span class="iconbtn">' + ic("M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 16H5V5h14z") + '</span><span class="iconbtn">' + ic("M17.65 6.35A8 8 0 1 0 19.73 14h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z") + '</span><span class="right">1–6 of 6</span></div>' +
+      '<div class="tabs" aria-hidden="true"><div class="on">' + ic(P.mail) + 'Primary</div><div>Promotions</div><div>Updates</div></div>' +
+      '<h2 class="sr-only">Inbox</h2><ul class="rows">' +
+      '<li><button type="button" class="row unread" id="open-mail">' +
+        '<span class="star" aria-hidden="true">' + ic(P.star) + '</span>' +
+        '<span class="who">IJUDUDL Editorial Office</span>' +
+        '<span class="what"><b>Decision on MS-2026-0418: Major Revision</b><span class="chip red">Action required</span> – Dear Author, thank you for submitting “' + esc(MS_TITLE) + '”…</span>' +
+        '<span class="when">9:14 AM</span><span class="sr-only">Unread. Press Enter to open.</span>' +
+      '</button></li>';
+    rows.forEach(function (r) {
+      html += '<li class="row' + (r[4] ? " unread" : "") + '"><span class="star" aria-hidden="true">' + ic(P.star) + '</span><span class="who">' + esc(r[0]) + '</span>' +
+        '<span class="what"><b>' + esc(r[1]) + '</b> – ' + esc(r[2]) + '</span><span class="when">' + r[3] + '</span></li>';
+    });
+    html += '</ul><p class="hint"><b>You’re the author.</b> You spent eight months on this manuscript and submitted it three weeks ago. The decision just arrived. Open it.</p>';
+    return html;
+  }
+
+  function email() {
+    return '<div class="toolbar"><button type="button" class="iconbtn" data-go="0" aria-label="Back to inbox">' + ic(P.back) + '</button>' +
+      '<span class="iconbtn" aria-hidden="true">' + ic(P.archive) + '</span><span class="iconbtn" aria-hidden="true">' + ic(P.trash) + '</span><span class="iconbtn" aria-hidden="true">' + ic(P.mail) + '</span><span class="right">1 of 6</span></div>' +
+      '<article class="read">' +
+      '<h2 class="subject">Decision on MS-2026-0418: Major Revision <span class="chip">Inbox</span></h2>' +
+      '<div class="sender"><span class="avatar" aria-hidden="true">EO</span>' +
+        '<div><span class="name"><b>IJUDUDL Editorial Office</b></span> <span class="addr">via Manuscript System</span><div class="to">to me</div></div>' +
+        '<span class="time">9:14 AM (0 minutes ago)</span></div>' +
+      '<div class="body">' +
+        '<p>Dear Author,</p>' +
+        '<p>Thank you for submitting your manuscript, “' + esc(MS_TITLE) + '” (MS-2026-0418). Based on the reviewers’ reports, the editor’s decision is <span class="decision">Major Revision</span>.</p>' +
+        '<p>Please submit your revised manuscript within <b>21 days</b>, with a point-by-point response to reviewers explaining how you addressed each comment. Where you choose not to make a requested change, please explain your rationale.</p>' +
+        '<p>All three reviewers commented on Figure 2. Their comments are below.</p>' +
+        R.map(function (r) { return '<div class="rev"><div class="lbl">' + r.who + '</div><p>“' + esc(r.text) + '”</p></div>'; }).join("") +
+        '<p class="sig">Sincerely,<br>Editorial Office</p>' +
+        '<div class="attach-h">' + '1 attachment' + '</div>' + attachCard() +
+        '<div class="actions"><button type="button" class="btn primary" id="start">' + ic(P.reply) + 'Draft response to reviewers</button></div>' +
+      '</div></article>';
+  }
+
+  function task(n) {
+    var t = TASKS[n], r = R[t.rev];
+    var opts = t.opts.map(function (o, i) {
+      var multi = t.type === "multi";
+      return '<button type="button" class="choice' + (multi ? " multi" : "") + '" data-i="' + i + '" ' + (multi ? 'role="checkbox" aria-checked="false"' : 'aria-pressed="false"') + '>' +
+        '<span class="mark" aria-hidden="true">' + (multi ? "" : String.fromCharCode(65 + i)) + '</span><span>' + esc(o.t) + '</span></button>';
+    }).join("");
+    return '<div class="toolbar"><button type="button" class="iconbtn" data-go="1" aria-label="Back to decision letter">' + ic(P.back) + '</button><span class="right">Major Revision · 21 days</span></div>' +
+      '<section class="compose" aria-labelledby="cmp-title">' +
+        '<div class="compose-bar"><span id="cmp-title">Response to Reviewers – MS-2026-0418 (draft)</span><span class="right" aria-hidden="true">' + ic(P.min) + ic(P.x) + '</span></div>' +
+        '<div class="compose-meta">To: Editorial Office · Comment ' + (n + 1) + ' of 3</div>' +
+        '<div class="compose-body">' +
+          '<div class="quoted"><div class="lbl">' + r.who + ' wrote</div><p>“' + esc(r.text) + '”</p></div>' +
+          '<p class="ctx">' + esc(t.context) + ' <button type="button" class="figlink" data-open-fig>View your Figure 2</button></p>' +
+          '<fieldset><legend id="q-' + n + '">' + esc(t.q) + '</legend><div class="choices" ' + (t.type === "multi" ? 'role="group" aria-labelledby="q-' + n + '"' : "") + '>' + opts + '</div></fieldset>' +
+          (t.type === "multi" ? '<div class="actions" style="margin-top:6px"><button type="button" class="btn" id="check" disabled>Check answers</button></div>' : "") +
+          '<div id="fb" aria-live="polite"></div>' +
+          '<div class="actions"><button type="button" class="btn primary" id="next" hidden>' + (n < 2 ? "Add to response & next comment" : "Add to response & finish") + '</button></div>' +
+        '</div>' +
+      '</section>';
+  }
+
+  function debrief() {
+    var correct = 0; for (var k in state.first) if (state.first[k]) correct++;
+    function c(cls, txt) { return '<td><span class="' + cls + '">' + txt + '</span></td>'; }
+    return '<div class="toolbar"><button type="button" class="iconbtn" data-go="0" aria-label="Back to inbox">' + ic(P.back) + '</button><span class="right">Draft saved</span></div>' +
+      '<div class="debrief">' +
+      '<h3>Same problem, three very different revision workloads</h3>' +
+      '<span class="score">Defensible first choice on ' + correct + ' of 3 comments</span>' +
+      '<p>All three reviewers flagged a real accessibility issue in Figure 2. What changed was how much of the work they left for you.</p>' +
+      '<div class="tablewrap"><table><caption class="sr-only">How each reviewer comment supported the author</caption>' +
+      '<thead><tr><th scope="col">What the comment provides</th><th scope="col">Reviewer 1</th><th scope="col">Reviewer 2</th><th scope="col">Reviewer 3</th></tr></thead><tbody>' +
+      '<tr><th scope="row">Precise location</th>' + c("p", "~ Figure only") + c("p", "~ Figure only") + c("y", "✓ Fig. 2, p. 6") + '</tr>' +
+      '<tr><th scope="row">The specific barrier</th>' + c("n", "✗ No") + c("p", "~ Implied by the fixes") + c("y", "✓ Alt text; color-only legend") + '</tr>' +
+      '<tr><th scope="row">Impact on readers</th>' + c("n", "✗ No") + c("n", "✗ No") + c("y", "✓ Who and why") + '</tr>' +
+      '<tr><th scope="row">Options, not prescriptions</th>' + c("n", "✗ No") + c("n", "✗ One dictated fix") + c("y", "✓ Two options") + '</tr>' +
+      '<tr><th scope="row">Professional tone</th>' + c("p", "~ Neutral but curt") + c("n", "✗ “Unacceptable”") + c("y", "✓ Collegial") + '</tr>' +
+      '<tr class="cost"><th scope="row">Work left to the author</th><td>Diagnose the problem</td><td>Justify an alternative</td><td>Choose and implement</td></tr>' +
+      '</tbody></table></div>' +
+      '<details><summary>Read your response letter draft</summary><div class="letter">' + state.letter.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join("") + '</div></details>' +
+      '<div class="takeaway"><p>Every gap in a review becomes work for the author. Next, you’ll switch seats and learn to write comments like Reviewer 3’s.</p></div>' +
+      '<div class="actions"><button type="button" class="btn" id="restart">Start over</button></div>' +
+      '</div>';
+  }
+
+  /* =================== engine =================== */
+  function go(step) {
+    state.step = step;
+    document.getElementById("stepper").textContent = "Step " + (step + 1) + " of " + STEPS.length + ": " + STEPS[step];
+    document.getElementById("bar").style.width = ((step + 1) / STEPS.length * 100) + "%";
+    document.getElementById("navcount").textContent = step === 0 ? "3" : "2";
+    var html = step === 0 ? inbox() : step === 1 ? email() : step <= 4 ? task(step - 2) : debrief();
+    stage.innerHTML = '<div class="screen" tabindex="-1">' + html + '</div>';
+    stage.firstChild.focus();
+    wire(step);
+  }
+
+  function wire(step) {
+    Array.prototype.forEach.call(stage.querySelectorAll("[data-go]"), function (b) {
+      b.addEventListener("click", function () { go(Number(b.getAttribute("data-go"))); });
+    });
+    Array.prototype.forEach.call(stage.querySelectorAll("[data-open-fig]"), function (b) {
+      b.addEventListener("click", function () { openFig(b); });
+    });
+    if (step === 0) document.getElementById("open-mail").addEventListener("click", function () { go(1); });
+    if (step === 1) document.getElementById("start").addEventListener("click", function () { go(2); });
+    if (step >= 2 && step <= 4) wireTask(step - 2);
+    if (step === 5) document.getElementById("restart").addEventListener("click", function () { reset(); go(0); });
+  }
+
+  function insightHTML(t) {
+    return '<div class="insight">' + ic(P.bulb) + '<div><b>From the author’s seat:</b> ' + esc(t.insight) + '</div></div>' +
+      '<div class="letter"><span class="lbl">Added to your response letter</span>' + esc(t.letter) + '</div>';
+  }
+
+  function wireTask(n) {
+    var t = TASKS[n], btns = stage.querySelectorAll(".choice"), fb = document.getElementById("fb"), next = document.getElementById("next");
+    next.addEventListener("click", function () {
+      if (state.letter.indexOf(t.letter) < 0) state.letter.push(t.letter);
+      go(n + 3);
+    });
+
+    if (t.type === "single") {
+      Array.prototype.forEach.call(btns, function (b) {
+        b.addEventListener("click", function () {
+          var i = Number(b.getAttribute("data-i")), ok = i === t.best;
+          if (!(n in state.first)) state.first[n] = ok;
+          Array.prototype.forEach.call(btns, function (o) {
+            o.setAttribute("aria-pressed", o === b ? "true" : "false");
+            o.classList.remove("res-ok", "res-no");
+          });
+          b.classList.add(ok ? "res-ok" : "res-no");
+          fb.innerHTML = '<div class="fb ' + (ok ? "ok" : "no") + '"><p class="v">' + (ok ? "Defensible choice." : "Consider the trade-off.") + '</p><p>' + esc(t.opts[i].f) + '</p></div>' +
+            (ok ? insightHTML(t) : '<p class="ctx">Try another option to compare, or pick the most defensible one to continue.</p>');
+          next.hidden = !ok;
+        });
+      });
+    } else {
+      var check = document.getElementById("check");
+      Array.prototype.forEach.call(btns, function (b) {
+        b.addEventListener("click", function () {
+          if (b.disabled) return;
+          b.setAttribute("aria-checked", b.getAttribute("aria-checked") === "true" ? "false" : "true");
+          check.disabled = !stage.querySelector('.choice[aria-checked="true"]');
+        });
+      });
+      check.addEventListener("click", function () {
+        var allRight = true;
+        Array.prototype.forEach.call(btns, function (b, i) {
+          var picked = b.getAttribute("aria-checked") === "true", ok = t.opts[i].ok;
+          if (picked !== ok) allRight = false;
+          b.disabled = true;
+          if (ok) { b.classList.add("res-ok"); b.querySelector(".mark").textContent = "✓"; }
+          else if (picked) { b.classList.add("res-no"); b.querySelector(".mark").textContent = "✗"; }
+          b.setAttribute("aria-label", b.textContent + (ok ? " — correct feature" : " — not a feature of this comment") + (picked ? ", you selected this" : ""));
+        });
+        state.first[n] = allRight;
+        check.hidden = true;
+        fb.innerHTML = '<div class="fb ' + (allRight ? "ok" : "no") + '"><p class="v">' + (allRight ? "Exactly right." : "Close. Here’s the full picture.") + '</p><p>' + esc(allRight ? t.fOk : t.fNo) + '</p></div>' + insightHTML(t);
+        next.hidden = false;
+      });
+    }
+  }
+
+  /* =================== lightbox =================== */
+  var dlg = document.getElementById("lightbox"), opener = null;
+  document.getElementById("lb-fig").innerHTML = figureSVG(true);
+  function openFig(from) {
+    opener = from;
+    if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+    document.getElementById("lb-close").focus();
+  }
+  function closeFig() {
+    if (typeof dlg.close === "function") dlg.close(); else dlg.removeAttribute("open");
+  }
+  document.getElementById("lb-close").addEventListener("click", closeFig);
+  dlg.addEventListener("click", function (e) { if (e.target === dlg) closeFig(); });
+  dlg.addEventListener("close", function () { if (opener && document.body.contains(opener)) opener.focus(); });
+
+  reset();
+  go(0);
+})();
+</script>
+</body>
+</html>
